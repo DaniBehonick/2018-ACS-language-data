@@ -1,0 +1,121 @@
+---
+title: "2018 ACS language data"
+author: "Dani Behonick"
+date: "6/24/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+if (!require(devtools)) install.packages("devtools") 
+devtools::install_github("mnpopcenter/ipumsr", force = TRUE)
+```
+```{r install}
+install.packages("readr")
+install.packages("dplyr")
+install.packages('ipumsr')
+install.packages("haven")
+install.packages("rlang")
+```
+
+```{r}
+library(rlang)
+library(readr)
+library(dplyr)
+library(ipumsr)
+library(haven)
+```
+
+```{r}
+ddi <- read_ipums_ddi('usa_00001.xml')
+data <- read_ipums_micro(ddi)
+```
+**Notes** 
+IPUMS language code dictionary here: https://www2.census.gov/programs-surveys/demo/about/language-use/primary_language_list.pdf  
+bbb = N/A (less than 5 years old/speaks only English) according to   https://usa.ipums.org/usa/resources/codebooks/DataDict2010.pdf  
+https://usa.ipums.org/usa/resources/codebooks/DataDict2007.pdf  
+https://usa.ipums.org/usa/resources/codebooks/DataDict2005.pdf  
+
+```{r}
+#make modified table of per person weights and languages
+data_small <- data %>% select(PERWT, US2018A_LANP)
+```
+
+```{r}
+#create language-specific datasets to figure out final weights
+data_small_en <- data_small %>% filter(grepl("BBBB",
+US2018A_LANP)) %>% group_by(US2018A_LANP)
+
+data_small_es <- data_small %>% filter(grepl("1200",
+US2018A_LANP)) %>% group_by(US2018A_LANP)
+
+data_small_fr <- data_small %>% filter(grepl("1170",
+US2018A_LANP)) %>% group_by(US2018A_LANP)
+
+data_small_ig <- data_small %>% filter(grepl("6370",
+US2018A_LANP)) %>% group_by(US2018A_LANP)
+
+data_small_yo <- data_small %>% filter(grepl("6290",
+US2018A_LANP)) %>% group_by(US2018A_LANP)
+```
+
+```{r}
+#get sum weight for each language
+PERWTsummary <- rbind(sum(data_small_fr$PERWT), 
+  sum(data_small_es$PERWT), sum(data_small_yo$PERWT), 
+  sum(data_small_ig$PERWT), sum(data_small_en$PERWT))
+```
+
+
+```{r}
+#create frequency table of languages in dataset
+language <- table(data_small$US2018A_LANP)
+language <- as.data.frame(language)
+names(language)[1] = 'Language'
+```
+ref: https://www.r-bloggers.com/how-to-get-the-frequency-table-of-a-categorical-variable-as-a-data-frame-in-r/
+
+```{r}
+#isolate languages of interest for SA app
+language_small <- language %>% filter(Language == "BBBB" | 
+  Language == "1200" | Language == "1170" | 
+  Language == "6370" | Language == "6290")
+```
+
+```{r}
+#append PERWT column
+language_small$PERWT <- PERWTsummary
+```
+
+```{r}
+#create a column of weighted totals and percentages for each language
+language_small <- language_small %>% mutate(Total = Freq * PERWT)
+language_small <- language_small %>% mutate(Percentage =
+  ((Total/(sum(Total)))*100))
+language_small$Language <- as.character(language_small$Language)
+```
+
+```{r}
+#recode each language code to language name
+language_small$Language[language_small$Language == "1170"] <- "French"
+language_small$Language[language_small$Language == "1200"] <- "Spanish"
+language_small$Language[language_small$Language == "6290"] <- "Yoruba"
+language_small$Language[language_small$Language == "6370"] <- "Igbo"
+language_small$Language[language_small$Language == "BBBB"] <- "English"
+```
+
+```{r}
+#rename columns
+colnames(language_small) = c("Language", "Frequency", "Person Weight",
+  "Weighted Total", "Weighted Percentage")
+```
+
+
+```{r}
+write.csv(language_small, "language_small.csv")
+```
+
+
